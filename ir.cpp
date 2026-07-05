@@ -139,30 +139,20 @@ void IR_send(uint8_t temperature, uint8_t fanSpeed, bool power, Remote type) {
     }
 }
 
-IRRawDataType sDecodedRawDataArray[RAW_DATA_ARRAY_SIZE] = { 0x7B34ED12 }; // Initialize with NEC address 0x12 and command 0x34
-DistanceWidthTimingInfoStruct sDistanceWidthTimingInfo = { 9000, 4500, 560, 1690, 560, 560 }; // Initialize with NEC timing
-uint8_t sNumberOfBits = 32;
 void IR_recv_loop() {
     IrReceiver.begin(IR_RECEIVE_PIN, false);
     IrReceiver.start();
-    
+    Serial.println(F("IR Learning Mode - waiting for signals..."));
+
     while (true) {
         if (IrReceiver.decode()) {
+            Serial.println(F("\n=== IR Signal Received ==="));
             IrReceiver.printIRResultShort(&Serial);
-            if (IrReceiver.decodedIRData.protocol != UNKNOWN) {
-                IrReceiver.printIRSendUsage(&Serial);
-
-                if (memcmp(&sDistanceWidthTimingInfo, &IrReceiver.decodedIRData.DistanceWidthTimingInfo,
-                        sizeof(sDistanceWidthTimingInfo)) != 0) {
-                    Serial.print(F("Store new timing info data="));
-                    IrReceiver.printDistanceWidthTimingInfo(&Serial, &IrReceiver.decodedIRData.DistanceWidthTimingInfo);
-                    Serial.println();
-                    sDistanceWidthTimingInfo = IrReceiver.decodedIRData.DistanceWidthTimingInfo; // copy content here
-                }
-            }
+            IrReceiver.printIRSendUsage(&Serial);
+            IrReceiver.printIRResultRawFormatted(&Serial, true);
+            Serial.println(F("==========================\n"));
             IrReceiver.resume();
         }
-
         delay(100);
     }
 }

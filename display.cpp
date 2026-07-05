@@ -1,7 +1,4 @@
-#define INP_L_PIN 16
-#define INP_R_PIN 0
-#define INP_A_PIN 15
-#define INP_B_PIN 2
+#include "pins.h"
 
 #define ELEMENT_UI_SIZE 32
 #define ELEMENT_ICON_SIZE 28
@@ -14,7 +11,7 @@
 #include "utils.h"
 #include "display.h"
 
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, 5, 4, U8X8_PIN_NONE);
+U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, OLED_SCL, OLED_SDA, U8X8_PIN_NONE);
 
 static unsigned char Selection_Icon[] = {
    0x1f, 0xf0, 0x0f, 0xf8, 0x01, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x80,
@@ -103,6 +100,12 @@ void disp_init() {
     curState.power = false;
 
     u8g2.begin();
+
+    pinMode(INP_L_PIN, INPUT_PULLUP);
+    pinMode(INP_R_PIN, INPUT_PULLUP);
+    pinMode(INP_A_PIN, INPUT_PULLUP);
+    pinMode(INP_B_PIN, INPUT_PULLUP);
+
     u8g2.clearBuffer();
     u8g2.sendBuffer();
 }
@@ -162,7 +165,7 @@ void disp_update(float roomTemp, float humidity) {
     bool left_btn  = !digitalRead(INP_L_PIN);
     bool right_btn = !digitalRead(INP_R_PIN);
     bool b_btn     = !digitalRead(INP_B_PIN);
-    bool a_btn     =  digitalRead(INP_A_PIN);
+    bool a_btn     = !digitalRead(INP_A_PIN);
 
     switch (curUIState) {
         case IN_MAIN: {

@@ -1,17 +1,5 @@
 #include <Arduino.h>
 
-#define INP_L_PIN 16
-#define INP_R_PIN 0
-#define INP_A_PIN 15
-#define INP_B_PIN 2
-
-void resetPins() {
-    digitalWrite(INP_L_PIN, 0);
-    digitalWrite(INP_R_PIN, 0);
-    digitalWrite(INP_A_PIN, 0);
-    digitalWrite(INP_B_PIN, 0);
-}
-
 uint32_t reverse32bit(uint32_t x) {
     x = ((x >> 1) & 0x55555555u) | ((x & 0x55555555u) << 1);
     x = ((x >> 2) & 0x33333333u) | ((x & 0x33333333u) << 2);

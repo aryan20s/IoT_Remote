@@ -1,23 +1,22 @@
 #include <ArduinoJson.h>
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <U8g2lib.h>
 
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
 
+#include "pins.h"
 #include "network.h"
 #include "ir.h"
 #include "utils.h"
 #include "display.h"
 
-#define DHTPIN 13
-#define INP_L_PIN 16
 #define DHTTYPE    DHT11 
 
 ACState last;
-int lastTimeDataSent;
-int lastTimeTempRead;
+unsigned long lastTimeDataSent;
+unsigned long lastTimeTempRead;
 float curRoomTemp = 0, curHumidity = 0;
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
@@ -27,23 +26,34 @@ void setup() {
     disp_init();
     auto *u8g2 = disp_getu8g2();
 
-    resetPins();
     u8g2->clearBuffer();
     u8g2->setFont(u8g2_font_5x7_tr);
     
     u8g2->setCursor(0, 8);
-    u8g2->print("Press L for alt. network");
+    u8g2->print("L: alt network | R: IR learn");
     u8g2->setCursor(0, 16);
     u8g2->print("Continuing in 2 seconds...");
     u8g2->sendBuffer();
 
-    int timeStart = millis();
+    unsigned long timeStart = millis();
     bool homeWifi = false;
+    bool irLearn = false;
     while ((millis() - timeStart) < 2000) {
-        resetPins();
-        homeWifi  = !digitalRead(INP_L_PIN);
-        if (homeWifi) { break; }
-        yield();
+        homeWifi = !digitalRead(INP_L_PIN);
+        irLearn  = !digitalRead(INP_R_PIN);
+        if (homeWifi || irLearn) { break; }
+        delay(10);
+    }
+
+    if (irLearn) {
+        u8g2->clearBuffer();
+        u8g2->setFont(u8g2_font_5x7_tr);
+        u8g2->setCursor(0, 8);
+        u8g2->print("IR Learning Mode");
+        u8g2->setCursor(0, 16);
+        u8g2->print("Open serial monitor.");
+        u8g2->sendBuffer();
+        IR_recv_loop(); // never returns
     }
 
     u8g2->clearBuffer();
@@ -73,7 +83,7 @@ void setup() {
 
         Serial.print(".");
         u8g2->sendBuffer();
-        yield();
+        delay(500);
     }
 
     u8g2->setCursor(0, 16);
@@ -142,9 +152,7 @@ void loop() {
     ACState state = disp_getCurState();
     if ((state.fanSpd != last.fanSpd) || (state.temp != last.temp) || (state.power != last.power)) {
         last = state;
-        resetPins();
         IR_send(state.temp, state.fanSpd, state.power, disp_getCurRemote());
-        resetPins();
 
         net_sendUpdatePacket(state.temp, state.power, curRoomTemp, curHumidity);
     }
@@ -168,16 +176,16 @@ void loop() {
     }
     client->loop();
 
-    int curTime = millis();
+    unsigned long curTime = millis();
     if ((curTime - lastTimeDataSent) > 1000) {
         net_sendUpdatePacket(state.temp, state.power, curRoomTemp, curHumidity);
         lastTimeDataSent = curTime;
     }
 
     if ((curTime - lastTimeTempRead) > 2000) {
-        //updateDHT();
-        curRoomTemp = 27.5;
-        curHumidity = 65;
+        updateDHT();
         lastTimeTempRead = curTime;
     }
+
+    delay(50);
 }

@@ -2,6 +2,7 @@
 #define DISPLAY_H
 
 #include <U8g2lib.h>
+#include "ir.h"
 
 struct ACState {
     int temp;
