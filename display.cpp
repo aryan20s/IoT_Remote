@@ -5,13 +5,13 @@
 #define ELEMENTS_Y_OFFSET 12
 
 #include <Arduino.h>
-#include <U8g2lib.h>
+#include <SSD1306Wire.h>
 
 #include "ir.h"
 #include "utils.h"
 #include "display.h"
 
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
+SSD1306Wire oled(0x3C, OLED_SDA, OLED_SCL, GEOMETRY_128_64, I2C_ONE, 1000000);
 
 static unsigned char Selection_Icon[] = {
    0x1f, 0xf0, 0x0f, 0xf8, 0x01, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x80,
@@ -99,73 +99,77 @@ void disp_init() {
     curState.fanSpd = 3;
     curState.power = false;
 
-    u8g2.begin();
+    oled.init();
+    oled.setContrast(255);
+    oled.setFont(ArialMT_Plain_10);
 
     pinMode(INP_L_PIN, INPUT);
     pinMode(INP_R_PIN, INPUT);
     pinMode(INP_A_PIN, INPUT);
     pinMode(INP_B_PIN, INPUT);
 
-    u8g2.clearBuffer();
-    u8g2.sendBuffer();
+    oled.clear();
+    oled.display();
 }
 
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C* disp_getu8g2() {
-    return &u8g2;
+SSD1306Wire* disp_getDisplay() {
+    return &oled;
 }
 
 void drawElement(int element, int x, int y) {
-    u8g2.setDrawColor(1);
-    u8g2.drawFrame(x++, y++, ELEMENT_ICON_SIZE, ELEMENT_ICON_SIZE);
-    u8g2.drawFrame(x++, y++, ELEMENT_ICON_SIZE - 2, ELEMENT_ICON_SIZE - 2);
+    oled.setColor(WHITE);
+    oled.drawRect(x++, y++, ELEMENT_ICON_SIZE, ELEMENT_ICON_SIZE);
+    oled.drawRect(x++, y++, ELEMENT_ICON_SIZE - 2, ELEMENT_ICON_SIZE - 2);
 
     switch (element) {
         case TEMPERATURE: {
-            String disp = String(curState.temp);
-            disp += 'C';
-            u8g2.setFont(u8g2_font_6x12_tf);
-            u8g2.setFontMode(1);
-            u8g2.drawStr(x + 3, y + (ELEMENT_ICON_SIZE / 2) + 1, disp.c_str());
+            String disp = String(curState.temp) + "C";
+            oled.drawString(x + 2, y + (ELEMENT_ICON_SIZE / 2) - 7, disp);
             break;
         }
         case FAN: {
             for (int i = 0; i < curState.fanSpd; i++) {
-                u8g2.drawBox(x + (i * 8) + 1, y + 1, 6, 22);
+                oled.fillRect(x + (i * 8) + 1, y + 1, 6, 22);
             }
             break;
         }
         case POWER: {
-            int xPos = curState.power ? x + 6: x + 3;
-            u8g2.setFont(u8g2_font_6x12_tf);
-            u8g2.setFontMode(1);
-            u8g2.drawStr(xPos, y + (ELEMENT_ICON_SIZE / 2) + 1, curState.power ? "ON" : "OFF");
+            oled.drawString(x + 2, y + (ELEMENT_ICON_SIZE / 2) - 7, curState.power ? "ON" : "OFF");
             break;
         }
         case SETTINGS: {
-            u8g2.setBitmapMode(1);
-            u8g2.drawXBMP(x, y, 24, 24, Settings_Icon);
+            oled.drawXbm(x, y, 24, 24, Settings_Icon);
             break;
         }
         case LG_AKB7REM: case MITSUBREM: case UNIMPL2REM: {
-            u8g2.setBitmapMode(1);
-            u8g2.drawXBMP(x, y, 24, 24, Remote_Icon);
+            oled.drawXbm(x, y, 24, 24, Remote_Icon);
             break;
         }
         case EXIT: {
-            u8g2.setBitmapMode(1);
-            u8g2.drawXBMP(x, y, 24, 24, Exit_Icon);
+            oled.drawXbm(x, y, 24, 24, Exit_Icon);
             break;
         }
     }
 }
 
-void disp_update(float roomTemp, float humidity) {
-    u8g2.clearBuffer();
+// Helper to draw centered text + optional second line below icons
+void drawCenteredUI(const char* line1, const char* line2, const char* topLine) {
+    oled.setTextAlignment(TEXT_ALIGN_CENTER);
+    oled.drawString(64, ELEMENTS_Y_OFFSET + ELEMENT_UI_SIZE + 1, line1);
+    if (strlen(line2) > 0) {
+        oled.drawString(64, ELEMENTS_Y_OFFSET + ELEMENT_UI_SIZE + 12, line2);
+    }
+    oled.drawString(64, 0, topLine);
+    oled.setTextAlignment(TEXT_ALIGN_LEFT);
+}
 
-    bool left_btn  = !digitalRead(INP_L_PIN);
-    bool right_btn = !digitalRead(INP_R_PIN);
-    bool b_btn     = !digitalRead(INP_B_PIN);
-    bool a_btn     = !digitalRead(INP_A_PIN);
+void disp_update(float roomTemp, float humidity) {
+    oled.clear();
+
+    bool left_btn  = digitalRead(INP_L_PIN);
+    bool right_btn = digitalRead(INP_R_PIN);
+    bool b_btn     = digitalRead(INP_B_PIN);
+    bool a_btn     = digitalRead(INP_A_PIN);
 
     switch (curUIState) {
         case IN_MAIN: {
@@ -220,22 +224,10 @@ void disp_update(float roomTemp, float humidity) {
                 drawElement(i, (i * ELEMENT_UI_SIZE) + 2, ELEMENTS_Y_OFFSET + 2);
             }
 
-            u8g2.setBitmapMode(1);
-            u8g2.drawXBMP(ELEMENT_UI_SIZE * curSelectedElem, ELEMENTS_Y_OFFSET, ELEMENT_UI_SIZE, ELEMENT_UI_SIZE, Selection_Icon);
-            u8g2.setFont(u8g2_font_5x7_tr);
-            u8g2.setFontMode(1);
+            oled.drawXbm(ELEMENT_UI_SIZE * curSelectedElem, ELEMENTS_Y_OFFSET, ELEMENT_UI_SIZE, ELEMENT_UI_SIZE, Selection_Icon);
 
-            const char* str = UIStrings[curSelectedElem * 2];
-            int xPos = 64 - (strlen(str) * 5) / 2; // centering
-            u8g2.drawStr(xPos, ELEMENTS_Y_OFFSET + ELEMENT_UI_SIZE + 7 + 1, str);
-
-            str = UIStrings[(curSelectedElem * 2) + 1];
-            xPos = 64 - (strlen(str) * 5) / 2; // centering
-            u8g2.drawStr(xPos, ELEMENTS_Y_OFFSET + ELEMENT_UI_SIZE + 7 + 8 + 1, str);
-            
             String tempHumid = String("Room: ") + roomTemp + String("C ") + humidity + String("%");
-            xPos = 64 - (tempHumid.length() * 5) / 2; // centering
-            u8g2.drawStr(xPos, ELEMENTS_Y_OFFSET - 3, tempHumid.c_str());
+            drawCenteredUI(UIStrings[curSelectedElem * 2], UIStrings[(curSelectedElem * 2) + 1], tempHumid.c_str());
 
             break;
         }
@@ -278,34 +270,16 @@ void disp_update(float roomTemp, float humidity) {
                 drawElement(i, (j * ELEMENT_UI_SIZE) + 2, ELEMENTS_Y_OFFSET + 2);
             }
 
-            u8g2.setBitmapMode(1);
-            u8g2.drawXBMP(ELEMENT_UI_SIZE * (curSelectedElem - 4), ELEMENTS_Y_OFFSET, ELEMENT_UI_SIZE, ELEMENT_UI_SIZE, Selection_Icon);
-            u8g2.setFont(u8g2_font_5x7_tr);
-            u8g2.setFontMode(1);
-
-            const char* str = UIStrings[curSelectedElem * 2];
-            int xPos = 64 - (strlen(str) * 5) / 2; // centering
-            u8g2.drawStr(xPos, ELEMENTS_Y_OFFSET + ELEMENT_UI_SIZE + 7 + 1, str);
-
-            str = UIStrings[(curSelectedElem * 2) + 1];
-            xPos = 64 - (strlen(str) * 5) / 2; // centering
-            u8g2.drawStr(xPos, ELEMENTS_Y_OFFSET + ELEMENT_UI_SIZE + 7 + 8 + 1, str);
+            oled.drawXbm(ELEMENT_UI_SIZE * (curSelectedElem - 4), ELEMENTS_Y_OFFSET, ELEMENT_UI_SIZE, ELEMENT_UI_SIZE, Selection_Icon);
 
             String remName = String("Current: ") + UIStrings[(curRemote * 2) + 8];
-            xPos = 64 - (remName.length() * 5) / 2; // centering
-            u8g2.drawStr(xPos, ELEMENTS_Y_OFFSET - 3, remName.c_str());
+            drawCenteredUI(UIStrings[curSelectedElem * 2], UIStrings[(curSelectedElem * 2) + 1], remName.c_str());
 
             break;
         }
     }
 
-    // Button indicators at top right
-    if (left_btn) u8g2.drawBox(108, 0, 4, 4);
-    if (right_btn) u8g2.drawBox(113, 0, 4, 4);
-    if (a_btn) u8g2.drawBox(118, 0, 4, 4);
-    if (b_btn) u8g2.drawBox(123, 0, 4, 4);
-
-    u8g2.sendBuffer();
+    oled.display();
 }
 
 void disp_setTempPower(int temp, bool power) {

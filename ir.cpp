@@ -1,4 +1,10 @@
 #include <Arduino.h>
+
+#define DECODE_DISTANCE_WIDTH
+#define RAW_BUFFER_LENGTH 750
+#define NO_LED_FEEDBACK_CODE
+#define RECORD_GAP_MICROS 12000
+
 #include <IRremote.hpp>
 
 #include "pinconstants.h"
@@ -11,14 +17,6 @@ const char* REMOTE_TYPES[] = {
     "UNIMPL2", 
     "UNIMPL3",
 };
-
-#define DECODE_DISTANCE_WIDTH
-#ifndef RAW_BUFFER_LENGTH
-  #define RAW_BUFFER_LENGTH 750
-#endif
-
-#define NO_LED_FEEDBACK_CODE
-#define RECORD_GAP_MICROS 12000
 
 #define SEND_BUTTON_PIN                     APPLICATION_PIN
 #define DELAY_BETWEEN_REPEATS_MILLIS        70
@@ -141,13 +139,41 @@ void IR_send(uint8_t temperature, uint8_t fanSpeed, bool power, Remote type) {
 
 void IR_recv_loop() {
     IrReceiver.begin(IR_RECEIVE_PIN, false);
+    pinMode(IR_RECEIVE_PIN, INPUT_PULLUP); // Force pull-up in case the pin is floating/fighting a strapping resistor
     IrReceiver.start();
-    Serial.println(F("IR Learning Mode - waiting for signals..."));
+    
+    Serial.print(F("IR Learning Mode - waiting for signals on GPIO"));
+    Serial.print(IR_RECEIVE_PIN);
+    Serial.println(F("..."));
 
     while (true) {
         if (IrReceiver.decode()) {
             Serial.println(F("\n=== IR Signal Received ==="));
             IrReceiver.printIRResultShort(&Serial);
+            
+            Serial.print(F("Binary: "));
+            int totalBits = IrReceiver.decodedIRData.numberOfBits;
+            if (totalBits > 0) {
+                int bitsPrinted = 0;
+                for (int i = 0; i < DECODED_RAW_DATA_ARRAY_SIZE; i++) {
+                    uint64_t chunk = IrReceiver.decodedIRData.decodedRawDataArray[i];
+                    int bitsInChunk = (totalBits > 64) ? 64 : totalBits;
+                    
+                    for (int b = 0; b < bitsInChunk; b++) {
+                        if (bitsPrinted > 0 && (bitsPrinted % 4 == 0)) {
+                            Serial.print(" ");
+                        }
+                        Serial.print((uint8_t)((chunk >> b) & 1));
+                        bitsPrinted++;
+                    }
+                    totalBits -= bitsInChunk;
+                    if (totalBits <= 0) break;
+                }
+            } else {
+                Serial.print(F("Unknown protocol / no bits"));
+            }
+            Serial.println();
+
             IrReceiver.printIRSendUsage(&Serial);
             IrReceiver.printIRResultRawFormatted(&Serial, true);
             Serial.println(F("==========================\n"));

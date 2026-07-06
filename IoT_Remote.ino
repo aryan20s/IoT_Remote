@@ -1,6 +1,5 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
-#include <U8g2lib.h>
 
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
@@ -24,48 +23,43 @@ void setup() {
     Serial.begin(115200);
     updateDHT();
     disp_init();
-    auto *u8g2 = disp_getu8g2();
+    auto *dsp = disp_getDisplay();
 
-    u8g2->clearBuffer();
-    u8g2->setFont(u8g2_font_5x7_tr);
-    
-    u8g2->setCursor(0, 8);
-    u8g2->print("L: alt network | R: IR learn");
-    u8g2->setCursor(0, 16);
-    u8g2->print("Continuing in 2 seconds...");
-    u8g2->sendBuffer();
+    dsp->flipScreenVertically();
+    dsp->clear();
+    dsp->setFont(ArialMT_Plain_10);
+
+    dsp->drawString(0, 0, "L: alt network | R: IR learn");
+    dsp->drawString(0, 12, "Continuing in 2 seconds...");
+    dsp->display();
 
     unsigned long timeStart = millis();
     bool homeWifi = false;
     bool irLearn = false;
     while ((millis() - timeStart) < 2000) {
-        homeWifi = !digitalRead(INP_L_PIN);
-        irLearn  = !digitalRead(INP_R_PIN);
+        homeWifi = digitalRead(INP_L_PIN);
+        irLearn  = digitalRead(INP_R_PIN);
         if (homeWifi || irLearn) { break; }
         delay(10);
     }
 
     if (irLearn) {
-        u8g2->clearBuffer();
-        u8g2->setFont(u8g2_font_5x7_tr);
-        u8g2->setCursor(0, 8);
-        u8g2->print("IR Learning Mode");
-        u8g2->setCursor(0, 16);
-        u8g2->print("Open serial monitor.");
-        u8g2->sendBuffer();
+        dsp->clear();
+        dsp->drawString(0, 0, "IR Learning Mode");
+        dsp->drawString(0, 12, "Open serial monitor.");
+        dsp->display();
         IR_recv_loop(); // never returns
     }
 
-    u8g2->clearBuffer();
-    u8g2->setCursor(0, 8);
-    u8g2->print("Connecting to WiFi");
-    u8g2->sendBuffer();
+    dsp->clear();
+    dsp->drawString(0, 0, "Connecting to WiFi");
+    dsp->display();
 
     IR_init();
     if (homeWifi) {
         net_init("TP-Link_90B6", "15476517", "192.168.0.102", mqttCallback);
     } else {
-        net_init("vivo V23e 5G", "aryan234", "192.168.154.155", mqttCallback);
+        net_init("vivo V23e 5G", "aryan234", "10.35.30.155", mqttCallback);
     }
     
     int count = 0;
@@ -74,24 +68,20 @@ void setup() {
 
         if (count == 4) {
             count = 0;
-            u8g2->clearBuffer();
-            u8g2->setCursor(0, 8);
-            u8g2->print("Connecting to WiFi");
+            dsp->clear();
+            dsp->drawString(0, 0, "Connecting to WiFi");
         } else {
-            u8g2->print(".");
+            dsp->drawString(count * 5, 12, ".");
         }
 
         Serial.print(".");
-        u8g2->sendBuffer();
+        dsp->display();
         delay(500);
     }
 
-    u8g2->setCursor(0, 16);
-    u8g2->print("WiFi connected");
-    u8g2->setCursor(0, 24);
-    u8g2->print("Local IP: ");
-    u8g2->print(WiFi.localIP());
-    u8g2->sendBuffer();
+    dsp->drawString(0, 24, "WiFi connected");
+    dsp->drawString(0, 36, "IP: " + WiFi.localIP().toString());
+    dsp->display();
 
     Serial.println("\nWiFi connected");
     Serial.print("Local IP: ");
@@ -99,13 +89,12 @@ void setup() {
 
     delay(1000);
 
-    u8g2->setCursor(0, 40);
-    u8g2->print("Connecting to MQTT...");
-    u8g2->sendBuffer();
+    dsp->drawString(0, 48, "Connecting to MQTT...");
+    dsp->display();
     net_connectMQTT();
-    u8g2->setCursor(0, 48);
-    u8g2->print("Connected.");
-    u8g2->sendBuffer();
+    dsp->clear();
+    dsp->drawString(0, 0, "MQTT connected.");
+    dsp->display();
 
     delay(2500);
 }
@@ -159,19 +148,15 @@ void loop() {
 
     PubSubClient* client = net_getClient();
     if (!client->connected()) {
-        auto *u8g2 = disp_getu8g2();
-        u8g2->clearBuffer();
-        u8g2->setFont(u8g2_font_5x7_tr);
-        u8g2->setCursor(0, 8);
-        u8g2->print("MQTT connection lost.");
-        u8g2->setCursor(0, 16);
-        u8g2->print("Reconnecting to MQTT...");
-        u8g2->sendBuffer();
+        auto *dsp = disp_getDisplay();
+        dsp->clear();
+        dsp->drawString(0, 0, "MQTT connection lost.");
+        dsp->drawString(0, 12, "Reconnecting...");
+        dsp->display();
 
         net_connectMQTT();
-        u8g2->setCursor(0, 24);
-        u8g2->print("Connected.");
-        u8g2->sendBuffer();
+        dsp->drawString(0, 24, "Connected.");
+        dsp->display();
         delay(1000);
     }
     client->loop();

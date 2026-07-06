@@ -1,7 +1,7 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
-#include <U8g2lib.h>
+#include <SSD1306Wire.h>
 #include "ir.h"
 
 struct ACState {
@@ -12,7 +12,7 @@ struct ACState {
 
 void disp_init();
 void disp_update(float roomTemp, float humidity);
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C* disp_getu8g2();
+SSD1306Wire* disp_getDisplay();
 
 void disp_setTempPower(int temp, bool power);
 ACState disp_getCurState();
