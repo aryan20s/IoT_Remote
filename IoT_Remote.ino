@@ -7,7 +7,7 @@
 #include <DHT_U.h>
 
 #include "pins.h"
-#include "network.h"
+#include "mqtt_net.h"
 #include "ir.h"
 #include "utils.h"
 #include "display.h"

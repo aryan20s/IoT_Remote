@@ -57,7 +57,7 @@ void IR_sendLG(uint8_t temperature, uint8_t fanSpeed, bool power) {
     //     dat ^= 0b0000000000001000000000001000;
     // }
     
-    IRRawDataType dataToSend[RAW_DATA_ARRAY_SIZE] = { dat };
+    IRRawDataType dataToSend[DECODED_RAW_DATA_ARRAY_SIZE] = { dat };
     DistanceWidthTimingInfoStruct timingInfo = { 3150, 9900, 500, 1600, 500, 550 };
     uint8_t noOfBits = 28;
 
@@ -97,7 +97,7 @@ void IR_sendMitsubishi(uint8_t temperature, uint8_t fanSpeed, bool power) {
         dat |= 0x0004;
     }
     
-    IRRawDataType dataToSend[RAW_DATA_ARRAY_SIZE] = { 0x300000002126CB23, 0xFFFBC0000F000004, 0xFF };
+    IRRawDataType dataToSend[DECODED_RAW_DATA_ARRAY_SIZE] = { 0x300000002126CB23, 0xFFFBC0000F000004, 0xFF };
     dataToSend[0] |= dat << 44;
     dat = (((uint16_t) 0xFFFF) - ((uint16_t) dat)); // 16-bit inverse
     dataToSend[1] |= dat << 28;

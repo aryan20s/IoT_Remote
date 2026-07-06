@@ -11,7 +11,7 @@
 #include "utils.h"
 #include "display.h"
 
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, OLED_SCL, OLED_SDA, U8X8_PIN_NONE);
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
 
 static unsigned char Selection_Icon[] = {
    0x1f, 0xf0, 0x0f, 0xf8, 0x01, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x80,
@@ -101,16 +101,16 @@ void disp_init() {
 
     u8g2.begin();
 
-    pinMode(INP_L_PIN, INPUT_PULLUP);
-    pinMode(INP_R_PIN, INPUT_PULLUP);
-    pinMode(INP_A_PIN, INPUT_PULLUP);
-    pinMode(INP_B_PIN, INPUT_PULLUP);
+    pinMode(INP_L_PIN, INPUT);
+    pinMode(INP_R_PIN, INPUT);
+    pinMode(INP_A_PIN, INPUT);
+    pinMode(INP_B_PIN, INPUT);
 
     u8g2.clearBuffer();
     u8g2.sendBuffer();
 }
 
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C* disp_getu8g2() {
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C* disp_getu8g2() {
     return &u8g2;
 }
 
@@ -298,6 +298,12 @@ void disp_update(float roomTemp, float humidity) {
             break;
         }
     }
+
+    // Button indicators at top right
+    if (left_btn) u8g2.drawBox(108, 0, 4, 4);
+    if (right_btn) u8g2.drawBox(113, 0, 4, 4);
+    if (a_btn) u8g2.drawBox(118, 0, 4, 4);
+    if (b_btn) u8g2.drawBox(123, 0, 4, 4);
 
     u8g2.sendBuffer();
 }
