@@ -66,7 +66,7 @@ enum Element {
     SETTINGS = 3,
     LG_AKB7REM = 4,
     MITSUBREM = 5,
-    UNIMPL2REM = 6,
+    DAIKINREM = 6,
     EXIT = 7
 };
 
@@ -83,7 +83,7 @@ const char* UIStrings[] = {
     "",
     "MITSUB_ELEC",
     "",
-    "UNIMPL_2",
+    "DAIKIN",
     "",
     "Return to main menu.",
     "",
@@ -141,7 +141,8 @@ void drawElement(int element, int x, int y) {
             oled.drawXbm(x, y, 24, 24, Settings_Icon);
             break;
         }
-        case LG_AKB7REM: case MITSUBREM: case UNIMPL2REM: {
+        case LG_AKB7REM: case MITSUBREM: case DAIKINREM: {
+                            curRemote = DAIKIN;
             oled.drawXbm(x, y, 24, 24, Remote_Icon);
             break;
         }
@@ -152,7 +153,6 @@ void drawElement(int element, int x, int y) {
     }
 }
 
-// Helper to draw centered text + optional second line below icons
 void drawCenteredUI(const char* line1, const char* line2, const char* topLine) {
     oled.setTextAlignment(TEXT_ALIGN_CENTER);
     oled.drawString(64, ELEMENTS_Y_OFFSET + ELEMENT_UI_SIZE + 1, line1);
@@ -166,10 +166,18 @@ void drawCenteredUI(const char* line1, const char* line2, const char* topLine) {
 void disp_update(float roomTemp, float humidity) {
     oled.clear();
 
-    bool left_btn  = digitalRead(INP_L_PIN);
-    bool right_btn = digitalRead(INP_R_PIN);
-    bool b_btn     = digitalRead(INP_B_PIN);
-    bool a_btn     = digitalRead(INP_A_PIN);
+    static bool prev_l = false, prev_r = false, prev_a = false, prev_b = false;
+    bool cur_l = digitalRead(INP_L_PIN) == HIGH;
+    bool cur_r = digitalRead(INP_R_PIN) == HIGH;
+    bool cur_a = digitalRead(INP_A_PIN) == HIGH;
+    bool cur_b = digitalRead(INP_B_PIN) == HIGH;
+
+    bool left_btn  = !cur_l && prev_l;
+    bool right_btn = !cur_r && prev_r;
+    bool a_btn     = !cur_a && prev_a;
+    bool b_btn     = !cur_b && prev_b;
+
+    prev_l = cur_l; prev_r = cur_r; prev_a = cur_a; prev_b = cur_b;
 
     switch (curUIState) {
         case IN_MAIN: {
@@ -248,7 +256,8 @@ void disp_update(float roomTemp, float humidity) {
                             curRemote = MITSUB;
                             break;
                         }
-                        case UNIMPL2REM: {
+                        case DAIKINREM: {
+                            curRemote = DAIKIN;
                             break;
                         }
                         case EXIT: {

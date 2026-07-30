@@ -19,6 +19,95 @@ unsigned long lastTimeTempRead;
 float curRoomTemp = 0, curHumidity = 0;
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
+
+void ipChooserScreen(SSD1306Wire* dsp, bool isHome) {
+    IPAddress local = WiFi.localIP();
+    uint8_t ip[4] = {local[0], local[1], local[2], local[3]};
+
+    int digits[12];
+    for (int i = 0; i < 4; i++) {
+        digits[i * 3]     = ip[i] / 100;
+        digits[i * 3 + 1] = (ip[i] / 10) % 10;
+        digits[i * 3 + 2] = ip[i] % 10;
+    }
+
+    int curDigit = 0;
+    bool prev_l = false, prev_r = false, prev_a = false, prev_b = false;
+    
+    while (true) {
+        dsp->clear();
+        dsp->drawString(0, 0, "Set MQTT IP:");
+        
+        int x = 6;
+        for (int i = 0; i < 12; i++) {
+            if (i == curDigit) {
+                dsp->setColor(INVERSE);
+                dsp->fillRect(x, 16, 7, 12);
+                dsp->drawString(x + 1, 16, String(digits[i]));
+                dsp->setColor(WHITE);
+            } else {
+                dsp->drawString(x + 1, 16, String(digits[i]));
+            }
+            x += 7;
+            
+            if (i % 3 == 2 && i < 11) {
+                dsp->drawString(x, 16, ".");
+                x += 6;
+            }
+        }
+        
+        dsp->drawString(0, 36, "L/R: Select  A/B: +/-");
+        dsp->drawString(0, 48, "Hold L+R to confirm");
+        dsp->display();
+
+        bool cur_l = digitalRead(INP_L_PIN) == HIGH;
+        bool cur_r = digitalRead(INP_R_PIN) == HIGH;
+        bool cur_a = digitalRead(INP_A_PIN) == HIGH;
+        bool cur_b = digitalRead(INP_B_PIN) == HIGH;
+
+        if (cur_l && cur_r) {
+            break;
+        }
+
+        bool l = !cur_l && prev_l;
+        bool r = !cur_r && prev_r;
+        bool a = !cur_a && prev_a;
+        bool b = !cur_b && prev_b;
+
+        if (l) { curDigit = (curDigit - 1 + 12) % 12; }
+        if (r) { curDigit = (curDigit + 1) % 12; }
+        
+        if (a) {
+            digits[curDigit] = (digits[curDigit] + 1) % 10;
+        }
+        if (b) {
+            digits[curDigit] = (digits[curDigit] - 1 + 10) % 10;
+        }
+
+        prev_l = cur_l;
+        prev_r = cur_r;
+        prev_a = cur_a;
+        prev_b = cur_b;
+        
+        delay(20);
+    }
+    
+    for (int i = 0; i < 4; i++) {
+        int val = digits[i * 3] * 100 + digits[i * 3 + 1] * 10 + digits[i * 3 + 2];
+        if (val > 255) val = 255;
+        ip[i] = val;
+    }
+
+    String ipStr = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
+    
+    dsp->clear();
+    dsp->drawString(0, 0, "Using IP:");
+    dsp->drawString(0, 12, ipStr);
+    dsp->display();
+    
+    net_setServerIP(ipStr.c_str());
+}
+
 void setup() {
     Serial.begin(115200);
     updateDHT();
@@ -29,17 +118,20 @@ void setup() {
     dsp->clear();
     dsp->setFont(ArialMT_Plain_10);
 
-    dsp->drawString(0, 0, "L: alt network | R: IR learn");
-    dsp->drawString(0, 12, "Continuing in 2 seconds...");
+    dsp->drawString(0, 0, "L: alt net | R: learn");
+    dsp->drawString(0, 12, "A: raw IR");
+    dsp->drawString(0, 24, "Continuing in 2 sec...");
     dsp->display();
 
     unsigned long timeStart = millis();
     bool homeWifi = false;
     bool irLearn = false;
+    bool irRaw = false;
     while ((millis() - timeStart) < 2000) {
-        homeWifi = digitalRead(INP_L_PIN);
-        irLearn  = digitalRead(INP_R_PIN);
-        if (homeWifi || irLearn) { break; }
+        homeWifi = digitalRead(INP_L_PIN) == HIGH;
+        irLearn  = digitalRead(INP_R_PIN) == HIGH;
+        irRaw    = digitalRead(INP_A_PIN) == HIGH;
+        if (homeWifi || irLearn || irRaw) { break; }
         delay(10);
     }
 
@@ -49,6 +141,14 @@ void setup() {
         dsp->drawString(0, 12, "Open serial monitor.");
         dsp->display();
         IR_recv_loop(); // never returns
+    }
+    
+    if (irRaw) {
+        dsp->clear();
+        dsp->drawString(0, 0, "Raw IR Mode");
+        dsp->drawString(0, 12, "Open serial monitor.");
+        dsp->display();
+        IR_raw_loop(); // never returns
     }
 
     dsp->clear();
@@ -89,7 +189,12 @@ void setup() {
 
     delay(1000);
 
-    dsp->drawString(0, 48, "Connecting to MQTT...");
+    ipChooserScreen(dsp, homeWifi);
+
+    delay(1000);
+
+    dsp->clear();
+    dsp->drawString(0, 0, "Connecting to MQTT...");
     dsp->display();
     net_connectMQTT();
     dsp->clear();

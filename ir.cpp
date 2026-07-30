@@ -3,18 +3,19 @@
 #define DECODE_DISTANCE_WIDTH
 #define RAW_BUFFER_LENGTH 750
 #define NO_LED_FEEDBACK_CODE
-#define RECORD_GAP_MICROS 12000
+#define RECORD_GAP_MICROS 50000
 
 #include <IRremote.hpp>
 
 #include "pinconstants.h"
+#include "pins.h"
 #include "ir.h"
 #include "utils.h"
 
 const char* REMOTE_TYPES[] = {
     "LG_AKB7", 
     "MITSUBISHI", 
-    "UNIMPL2", 
+    "DAIKIN", 
     "UNIMPL3",
 };
 
@@ -118,6 +119,56 @@ void IR_sendMitsubishi(uint8_t temperature, uint8_t fanSpeed, bool power) {
     );
 }
 
+
+void IR_sendDaikin(uint8_t temperature, uint8_t fanSpeed, bool power) {
+    temperature = clamp(temperature, 18, 30);
+    
+    uint8_t frame1[7] = {0x11, 0xDA, 0x17, 0x48, 0x04, 0x00, 0x4E};
+    uint8_t frame2[18] = {0x11, 0xDA, 0x17, 0x48, 0x00, 0x73, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00};
+    
+    if (power) {
+        frame2[7] = 0x21;
+    } else {
+        frame2[7] = 0x20;
+    }
+    
+    frame2[10] = (temperature * 2) - 18;
+    
+    if (fanSpeed == 0) frame2[11] = 0x06; 
+    else if (fanSpeed == 1) frame2[11] = 0x16;
+    else if (fanSpeed == 2) frame2[11] = 0x36;
+    else if (fanSpeed >= 3) frame2[11] = 0x56;
+    
+    uint16_t checksum = 0;
+    for (int i = 0; i < 17; i++) {
+        checksum += frame2[i];
+    }
+    frame2[17] = checksum & 0xFF;
+    
+    auto sendFrame = [](uint8_t* payload, uint8_t lengthBytes) {
+        uint64_t dataToSend[3] = {0, 0, 0}; 
+        for (int i = 0; i < lengthBytes; i++) {
+            dataToSend[i / 8] |= ((uint64_t)payload[i]) << ((i % 8) * 8);
+        }
+        DistanceWidthTimingInfoStruct timingInfo = { 5050, 2200, 350, 1850, 350, 750 };
+        IrSender.sendPulseDistanceWidthFromArray(
+            38, &timingInfo, &dataToSend[0], lengthBytes * 8, PROTOCOL_IS_LSB_FIRST, 100, 0
+        );
+    };
+    
+    Serial.print("Sending DAIKIN data (Power: ");
+    Serial.print(power ? "ON" : "OFF");
+    Serial.print(", Temp: ");
+    Serial.print(temperature);
+    Serial.print(", Fan: ");
+    Serial.print(fanSpeed);
+    Serial.println(")");
+    
+    sendFrame(frame1, 7);
+    delay(13);
+    sendFrame(frame2, 18);
+}
+
 void IR_init() {
     IrSender.begin(IR_SEND_PIN);
 }
@@ -130,6 +181,9 @@ void IR_send(uint8_t temperature, uint8_t fanSpeed, bool power, Remote type) {
         case MITSUB:
             IR_sendMitsubishi(temperature, fanSpeed, power);
         break;
+        case DAIKIN:
+            IR_sendDaikin(temperature, fanSpeed, power);
+        break;
         default:
             Serial.print("Unimplemented remote type: ");
             Serial.println(REMOTE_TYPES[type]);
@@ -139,7 +193,7 @@ void IR_send(uint8_t temperature, uint8_t fanSpeed, bool power, Remote type) {
 
 void IR_recv_loop() {
     IrReceiver.begin(IR_RECEIVE_PIN, false);
-    pinMode(IR_RECEIVE_PIN, INPUT_PULLUP); // Force pull-up in case the pin is floating/fighting a strapping resistor
+    pinMode(IR_RECEIVE_PIN, INPUT_PULLUP);
     IrReceiver.start();
     
     Serial.print(F("IR Learning Mode - waiting for signals on GPIO"));
@@ -180,5 +234,135 @@ void IR_recv_loop() {
             IrReceiver.resume();
         }
         delay(100);
+    }
+}
+void IR_raw_loop() {
+    Serial.print(F("Raw IR Mode - watching GPIO "));
+    Serial.println(IR_RECEIVE_PIN);
+    Serial.println(F("Waiting for IR signals... (Gap timeout: 50ms)"));
+    Serial.println(F("Press 'A' button to toggle Compact/Full output."));
+    
+    IrReceiver.begin(IR_RECEIVE_PIN, false);
+    pinMode(IR_RECEIVE_PIN, INPUT_PULLUP);
+    IrReceiver.start();
+    
+    bool compactMode = false;
+    bool prev_a = digitalRead(INP_A_PIN) == HIGH;
+    
+    while(true) {
+        bool cur_a = digitalRead(INP_A_PIN) == HIGH;
+        if (cur_a && !prev_a) {
+            compactMode = !compactMode;
+            Serial.print(F("\n*** Switched to "));
+            Serial.print(compactMode ? F("COMPACT") : F("FULL"));
+            Serial.println(F(" Logging Mode ***"));
+        }
+        prev_a = cur_a;
+        
+        if (IrReceiver.decode()) {
+            
+            int bitCount = 0;
+            uint8_t currentByte = 0;
+            int frameNum = 1;
+            bool inFrame = false;
+            String decodeOut = "";
+            
+            for (int i = 1; i < IrReceiver.decodedIRData.rawlen; i += 2) {
+                uint32_t mark = IrReceiver.irparams.rawbuf[i] * MICROS_PER_TICK;
+                
+                if (i + 1 >= IrReceiver.decodedIRData.rawlen) {
+                    break; 
+                }
+                uint32_t space = IrReceiver.irparams.rawbuf[i + 1] * MICROS_PER_TICK;
+                
+                if (mark > 2000) {
+                    if (inFrame) {
+                        if (bitCount > 0) {
+                            char buf[32];
+                            sprintf(buf, " (Partial: %02X)", currentByte);
+                            decodeOut += buf;
+                        }
+                        decodeOut += "\n";
+                    }
+                    decodeOut += "Frame ";
+                    decodeOut += String(frameNum++);
+                    decodeOut += ": ";
+                    bitCount = 0;
+                    currentByte = 0;
+                    inFrame = true;
+                    continue; 
+                }
+                
+                if (inFrame) {
+                    if (space > 1200 && space < 3000) {
+                        currentByte |= (1 << bitCount);
+                    } else if (space > 300 && space <= 1200) {
+                        // 0 bit
+                    } else if (space > 5000) {
+                        if (bitCount > 0) {
+                            char buf[32];
+                            sprintf(buf, " (Partial: %02X)", currentByte);
+                            decodeOut += buf;
+                        }
+                        decodeOut += "\n";
+                        inFrame = false;
+                        continue;
+                    }
+                    
+                    if (space <= 3000) {
+                        bitCount++;
+                        if (bitCount == 8) {
+                            char buf[16];
+                            sprintf(buf, "%02X ", currentByte);
+                            decodeOut += buf;
+                            currentByte = 0;
+                            bitCount = 0;
+                        }
+                    }
+                }
+            }
+            
+            if (inFrame && bitCount > 0) {
+                char buf[32];
+                sprintf(buf, " (Partial: %02X)", currentByte);
+                decodeOut += buf;
+                decodeOut += "\n";
+            }
+            
+            if (compactMode) {
+                if (decodeOut.length() > 0) {
+                    Serial.println(F("\n--- AC Signal (Compact) ---"));
+                    Serial.print(decodeOut);
+                }
+            } else {
+                Serial.println(F("\n--- IR Signal (Full) ---"));
+                IrReceiver.printIRResultShort(&Serial);
+                
+                if (IrReceiver.decodedIRData.numberOfBits > 0) {
+                    Serial.print(F("Raw Data (Hex): "));
+                    for (int i = 0; i < DECODED_RAW_DATA_ARRAY_SIZE; i++) {
+                        uint64_t chunk = IrReceiver.decodedIRData.decodedRawDataArray[i];
+                        if (chunk == 0 && i > 0) break;
+                        Serial.print("0x");
+                        Serial.print((unsigned long)(chunk >> 32), HEX);
+                        Serial.print((unsigned long)(chunk & 0xFFFFFFFF), HEX);
+                        Serial.print(" ");
+                    }
+                    Serial.println();
+                }
+                
+                if (decodeOut.length() > 0) {
+                    Serial.println(F("AC Protocol Decode (Hex Bytes):"));
+                    Serial.print(decodeOut);
+                }
+                
+                IrReceiver.printIRSendUsage(&Serial);
+                IrReceiver.printIRResultRawFormatted(&Serial, true);
+                Serial.println(F("-----------------"));
+            }
+            
+            IrReceiver.resume();
+        }
+        delay(10);
     }
 }

@@ -9,6 +9,7 @@ enum MsgType {
 };
 
 void net_init(const char* ssid, const char* password, const char* mqttServer, MQTT_CALLBACK_SIGNATURE);
+void net_setServerIP(const char* ip);
 void net_sendUpdatePacket(int temp, bool power, float roomTemp, float humidity);
 void net_connectMQTT();
 PubSubClient* net_getClient();
