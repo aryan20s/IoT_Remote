@@ -142,7 +142,6 @@ void drawElement(int element, int x, int y) {
             break;
         }
         case LG_AKB7REM: case MITSUBREM: case DAIKINREM: {
-                            curRemote = DAIKIN;
             oled.drawXbm(x, y, 24, 24, Remote_Icon);
             break;
         }
